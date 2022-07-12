@@ -1,34 +1,36 @@
-#BiocManager::install("BiocManager")
-#BiocManager::install("DESeq2")
-#BiocManager::install("airway")
-#BiocManager::install("ggplot2")
-#BiocManager::install("EnhancedVolcano")
-#BiocManager::install("dplyr")
-#BiocManager::install("AnnotationDbi")
-#BiocManager::install("genefilter")
-#BiocManager::install("apeglm")
-#BiocManager::install("ashr")
-#BiocManager::install("EnhancedVolcano")
+# 
+# Author: Hsiao-Chen Kuo 
+# Email: dine820410@gmail.com
+# 
+
+# 1. CRAN packages
+
+#install.packages("ggplot2")
 #install.packages("pheatmap")
 #install.packages("PoiClaClu")
+#install.packages("dplyr")
+
+# 2. Install Bioconductor packages
+#BiocManager::install("BiocManager")
+#BiocManager::install("DESeq2")
+#BiocManager::install("EnhancedVolcano")
+#BiocManager::install("apeglm")
+#BiocManager::install("ashr")
+
 
 library(DESeq2)
 library(RColorBrewer)
 library(pheatmap)
 library(PoiClaClu)
 library(ggplot2)
-library(genefilter)
 library(EnhancedVolcano)
 library(dplyr)
-library(AnnotationDbi)
 library(apeglm)
 library(ashr)
 
-## More info https://www.bioconductor.org/packages/devel/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html
 
-##### added by Dina #####
+# ------- Prepare feature counts matrix ------- 
 
-## Prepare feature counts matrix ##
 # Load data from a csv file
 setwd("C:/Rutgers/Github/BAP-TPA_UA_skin-in vivo")
 data <- read.csv("featurecounts.results_20200508-150414_transformed.csv", sep = ",", header = TRUE, row.names=1)
@@ -50,8 +52,8 @@ head(cts)
 str(cts)
 
 
-## Prepare design table ##
-# design table should include your treatment group, treatment duration, or sample replicates by which you want to compare
+## ------- Prepare design table -------
+# design table includes the treatment group, treatment duration, or sample replicates by which you want to compare
 # design table can include more than one condition by which you want to compare
 
 coldata <- read.csv("design table_RNA-seq-07-05-22.csv", sep = ",", header = TRUE, row.names = 1)
@@ -59,7 +61,6 @@ coldata
 coldata <- coldata[,c("trt","wk")] # only keep the columns of conditions by which you want to compare
 coldata$trt <- factor(coldata$trt)
 coldata$wk <- factor(coldata$wk)
-#data$repl <- factor(coldata$repl)
 
 ## double check if row names of the design matches the column names of the feature counts matrix ##
 all(rownames(coldata) %in% colnames(cts))
@@ -69,38 +70,39 @@ all(rownames(coldata) == colnames(cts))
 # cts <- cts[, rownames(coldata)]
 # all(rownames(coldata) == colnames(cts))
 
-
 ## Transform data into a matrix
 cts <-as.matrix(data)
 head(cts)
 str(cts)
 
-## Prepare DESeq DataSet by DESeqDataSetFromMatrix ##
-# 1. pre-filterthe row, to keep only rows: 
-# (1) that do not have 0 ##
-# (2) that have at least 50 reads in total ##
+## ------- Prepare DESeq DataSet by DESeqDataSetFromMatrix -------
+# 1. pre-filter the row, to keep only rows that: 
+# (1) do not have 0 ##
+# (2) have at least 50 reads in total ##
 
 dds <- DESeqDataSetFromMatrix(countData = cts,
                               colData = coldata,
-                              design = ~ wk + trt)
-#(1)
+                              design = ~ wk + trt + wk:trt)
+#(1) 
 dds <- dds[apply(counts(dds), 1, function(row) all(row !=0)),]
 #(2)
 dds <- dds[rowSums(counts(dds)) >= 50,]
 
 dds2 <- dds # copy dds to dds2 to set the ref to BAP+TPA
 
-# 2a. explicitly set the factors level and specify the reference level to Control
+# 2. explicitly set the factors level and specify the reference level 
+
+#(1) set ref to Control
 dds$trt <- factor(dds$trt, levels = c("Control", "BAP+TPA", "BAP+TPA+UA"))
 dds$trt <- relevel(dds$trt, ref = "Control")
 
-# 2b. explicitly set the factors level and specify the reference level to BAP+TPA
+#(2) set ref to BAP+TPA
 
 dds2$trt <- factor(dds2$trt, levels = c("Control", "BAP+TPA", "BAP+TPA+UA"))
 dds2$trt <- relevel(dds2$trt, ref = "BAP+TPA")
 
 
-## Plot the heatmap of Poisson distances between samples ##
+## ------- Plot the heatmap of Poisson distances between samples ------- 
 
 # *Background info:
 # Poisson distance is used to examine overall similarity between samples
@@ -108,7 +110,7 @@ dds2$trt <- relevel(dds2$trt, ref = "BAP+TPA")
 # Euclidian distance do NOT onsider variation between sample counts when calculating distances
 # use Poisson distance for raw (not normalized) count matrix
 # use Euclidean distance for data normalized by regularized-logarithm transformation (rlog) or variance stablization transfromation (vst)
-# https://www.biostars.org/p/278391/
+# Reference: https://www.biostars.org/p/278391/
 
 # 1. transpose the counts and transform the poisson distance into a matrix
 poisd <- PoissonDistance(t(counts(dds)))
@@ -122,7 +124,9 @@ colors = colorRampPalette(rev(brewer.pal(9, "YlGnBu")))(255)
 
 
 
-# 3a. Plot without Clustering
+# 3. Plot heatmap
+
+# without Clustering
 
 pheatmap(samplePoisDistMatrix,
          clustering_distance_rows = poisd$dd,
@@ -132,7 +136,7 @@ pheatmap(samplePoisDistMatrix,
          col = colors)
 
 
-# 3b. Plot with Clustering
+# with Clustering
 
 pheatmap(samplePoisDistMatrix,
          clustering_distance_rows = poisd$dd,
@@ -140,7 +144,10 @@ pheatmap(samplePoisDistMatrix,
          cluster_cols=F,
          col = colors)
 
-## Perform DESeq data analysis ##
+## ------- Perform DESeq data analysis ------- 
+# Reference: 
+# Love, M.I., Huber, W., Anders, S. (2014) Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biology, 15:550. 10.1186/s13059-014-0550-8
+
 dds <- DESeq(dds) # ref is control
 dds2 <- DESeq(dds2) # ref is BAP+TPA
 
@@ -159,7 +166,8 @@ write.csv(res_UA.vs.TPA, file = "deseq2_results_UAvsTPA.csv")
 
 
 
-## MA plot: M stands for magnitude and A stands for average ##
+## ------- MA plot and Data Shrinkage------- 
+# M stands for magnitude and A stands for average
 # *Background info:
 # MA plot visualizes the log2 fold change vs. average of normalized count  
 # MA plot points are colored blue if Padj < 0.1 (default) -> can change to 0.05 by alpha = 0.05
@@ -175,8 +183,9 @@ plotMA(res_UA.vs.TPA, ylim = c(-4, 4), alpha = 0.05)
 # The shrunken log fold changes are useful for ranking and visualization, without the need for arbitrary filters on low count genes.
 # The normal prior can sometimes produce too strong of shrinkage for certain datasets. 
 # In DESeq2 (ver1.18): two additional adaptive shrinkage estimators, apeglm and ashr (available via the type argument of lfcShrink). 
-# (1) apeglm shrinkage
 
+# (1) apeglm shrinkage
+# Zhu, A., Ibrahim, J.G., Love, M.I. (2018) Heavy-tailed prior distributions for sequence count data: removing the noise and preserving large differences. Bioinformatics. 10.1093/bioinformatics/bty895
 
 # BAP+TPA vs Control
 resultsNames(dds)
@@ -190,6 +199,7 @@ plotMA(resLFC_UA.vs.TPA_ape, ylim = c(-4, 4), alpha = 0.05)
 
 
 # (2) ashr shrinkage
+# Stephens, M. (2016) False discovery rates: a new deal. Biostatistics, 18:2. 10.1093/biostatistics/kxw041
 
 # BAP+TPA vs Control
 resultsNames(dds)
@@ -206,86 +216,89 @@ resultsNames(dds)
 
 resLFC_UA.vs.TPA_ash <- lfcShrink(dds2, coef="trt_BAP.TPA.UA_vs_BAP.TPA", type="ashr")
 plotMA(resLFC_UA.vs.TPA_ash, ylim = c(-4, 4), alpha = 0.05)
+
 # this gives the same MA plot
-resLFC_UA.vs.TPA_ash2 <- lfcShrink(dds, contrast = c("trt", "BAP+TPA+UA", "BAP+TPA"), type="ashr")
-plotMA(resLFC_UA.vs.TPA_ash2, ylim = c(-4, 4), alpha = 0.05)
+# resLFC_UA.vs.TPA_ash <- lfcShrink(dds, contrast = c("trt", "BAP+TPA+UA", "BAP+TPA"), type="ashr")
+# plotMA(resLFC_UA.vs.TPA_ash2, ylim = c(-4, 4), alpha = 0.05)
 resultsNames(dds2)
 
 
-## subset genes to find DEGs ##
+##  ------- Determine Differential Expressed Genes (DEGs) ------- 
 
-# 1. filter by adjust p value of 0.05 and order by log2 fold change
+# 1. filter by 
+# (1) adjust p value of 0.05
+# (2) sort by log2 fold change in ascending/descending order
 
-# sort it by the log2 fold change estimate in ascending order
-# the significant genes with the strongest down-regulation:
-resSig <- subset(resLFC_TPA.vs.C, padj < 0.95)
+# sort in ascending order: the DEGs with the strongest down-regulation:
+
+    # BAP/TPA vs Control
+resSig.TPAvsC.down <- subset(resLFC_TPA.vs.C_ash, padj < 0.05)
+head(resSig[ order( resSig$log2FoldChange ), ])
+    # BAP/TPA+UA vs BAP/TPA
+resSig.UAvsTPA.down <- subset(resLFC_UA.vs.TPA_ash, padj < 0.05)
 head(resSig[ order( resSig$log2FoldChange ), ])
 
-resSig <- subset(resLFC_TPA.vs.C_ash, padj < 0.05)
-head(resSig[ order( resSig$log2FoldChange ), ])
+# sort in descending order: the DEGs with the strongest up-regulation:
 
-
-resSig <- subset(resLFC_TPA.vs.C_ape, padj < 0.95)
-head(resSig[ order( resSig$log2FoldChange ), ])
-
-resSig <- subset(resLFC_TPA.vs.C, padj < 0.95)
+    # BAP/TPA vs Control
+resSig.TPAvsC.up <- subset(resLFC_TPA.vs.C_ash, padj < 0.05)
+head(resSig[ order( -resSig$log2FoldChange ), ])
+    # BAP/TPA+UA vs BAP/TPA
+resSig.UAvsTPA.up <- subset(resLFC_UA.vs.TPA_ash, padj < 0.05)
 head(resSig[ order( -resSig$log2FoldChange ), ])
 
-resSig <- subset(resLFC_TPA.vs.C_ash, padj < 0.05)
-head(resSig[ order( -resSig$log2FoldChange ), ])
+# 2. filter by 
+# (1) adjust p value of 0.05
+# (2) log2 fold change of 1 
+# (3) baseMean >= 20
+# (4) omit NA
+
+resSig.TPAvsC.method2 <- resLFC_TPA.vs.C_ash[which(resLFC_TPA.vs.C_ash$padj < 0.05 & abs(resLFC_TPA.vs.C_ash$log2FoldChange) >= 1 & resLFC_TPA.vs.C_ash$baseMean >= 20), ]
+resSig.TPAvsC.method2 <- na.omit(resultsSig)
+resSig.TPAvsC.method2
+
+resSig.UAvsTPA.method2 <- resLFC_UA.vs.TPA_ash[which(resLFC_UA.vs.TPA_ash$padj < 0.05 & abs(resLFC_UA.vs.TPA_ash$log2FoldChange) >= 1 & resLFC_UA.vs.TPA_ash$baseMean >= 20), ]
+resSig.UAvsTPA.method2 <- na.omit(resultsSig)
+resSig.UAvsTPA.method2
+
+# mini-conclusion:
+# gene of interest: 
+# genes which show high log2 fold change that may be the first priority to look into
+# method: filter by padj first and sort by DESeq2
+# 
+# can also consider some genes which have high p value (sort by padj)
+# the upregulation and downregulation depends on the threshold you set
 
 
-resSig <- subset(resLFC_TPA.vs.C_ape, padj < 0.95)
-head(resSig[ order( -resSig$log2FoldChange ), ])
+# ------- Plot Volcano Plot -------
 
-
-# sort it by the log2 fold change estimate in descending order
-# the significant genes with the strongest up-regulation:
-resSig <- subset(res_UA.vs.TPA, padj < 0.05)
-head(resSig[ order( resSig$log2FoldChange ), ])
-
-resSig <- subset(resLFC_UA.vs.TPA_ape, padj < 0.05)
-head(resSig[ order( resSig$log2FoldChange ), ])
-
-resSig <- subset(resLFC_UA.vs.TPA_ash, padj < 0.05)
-head(resSig[ order( resSig$log2FoldChange ), ])
-
-resSig <- subset(res_UA.vs.TPA, padj < 0.05)
-head(resSig[ order( -resSig$log2FoldChange ), ])
-
-resSig <- subset(resLFC_UA.vs.TPA_ape, padj < 0.05)
-head(resSig[ order( -resSig$log2FoldChange ), ])
-
-resSig <- subset(resLFC_UA.vs.TPA_ash, padj < 0.05)
-head(resSig[ order( -resSig$log2FoldChange ), ])
-
-
-
-
-# 2. filter by adjust p value of 0.05, log2 fold change of 1, baseMean >= 20
-resultsSig <- res[which(res$padj < 0.05 & abs(res$log2FoldChange) >= 1 & res$baseMean >= 20), ]
-resultsSig <- na.omit(resultsSig)
-
-
-resultsSig <- resLFC_TPA.vs.C_ash[which(resLFC_TPA.vs.C_ash$padj < 0.05 & abs(resLFC_TPA.vs.C_ash$log2FoldChange) >= 1 & resLFC_TPA.vs.C_ash$baseMean >= 20), ]
-resultsSig <- na.omit(resultsSig)
-resultsSig
-
-
-resultsSig <- resLFC_UA.vs.TPA_ash[which(resLFC_UA.vs.TPA_ash$padj < 0.05 & abs(resLFC_UA.vs.TPA_ash$log2FoldChange) >= 1 & resLFC_UA.vs.TPA_ash$baseMean >= 20), ]
-resultsSig <- na.omit(resultsSig)
-resultsSig
-
-
-# volcano plot
+library(EnhancedVolcano)
 # x axis is the how much the genes differ from the control
 # y axis means how statistically significant the change as compared to control
 
-
-library(EnhancedVolcano)
-
-#Default cutoffs are log2FC > |2| and adjusted P-value < 0.05
-EnhancedVolcano(resLFC_TPA.vs.C_ape, lab = rownames(res_TPA.vs.C), 
+   # BAP/TPA vs Control
+EnhancedVolcano(resLFC_TPA.vs.C_ash, lab = rownames(resLFC_TPA.vs.C_ash), 
+                x = "log2FoldChange", y="padj",
+                # add custom log2FC and adjusted P-value cutoffs
+                pCutoff = 0.05, FCcutoff = 2, #these are Default thresholds
+                # Adjust axis limits
+                xlim = c(-8, 8),
+                # Modify border
+                border = "full", borderWidth = 1.5, borderColour = "black", 
+                # remove gridlines
+                gridlines.major = FALSE, gridlines.minor = FALSE, 
+                # Add title
+                title = "BAP+TPA versus Control", subtitle = "Differential Expressed Genes",
+                # Add connector between labels and points
+                drawConnectors = TRUE, widthConnectors = 0.75,
+                # Customize legend position and point shape
+                legendPosition = 'bottom', 
+                shape = 19,
+                # Select the genes to show labels
+                selectLab = c('Nfe2l2','Nqo1','Hmox1','Tnfrsf1b')
+                )
+  # BAP/TPA+UA vs BAP/TPA
+EnhancedVolcano(resLFC_UA.vs.TPA_ash, lab = rownames(resLFC_UA.vs.TPA_ash), 
                 x = "log2FoldChange", y="padj",
                 pCutoff = 0.05, FCcutoff = 2,
                 xlim = c(-8, 8),
@@ -294,43 +307,23 @@ EnhancedVolcano(resLFC_TPA.vs.C_ape, lab = rownames(res_TPA.vs.C),
                 title = "BAP+TPA versus Control", subtitle = "Differential Expressed Genes",
                 drawConnectors = TRUE, widthConnectors = 0.75,
                 legendPosition = 'bottom', 
-                shape = 19)
+                shape = 19,
+                selectLab = c('Nfe2l2','Nqo1','Hmox1','Tnfrsf1b')
+                )
 
-EnhancedVolcano(res_TPA.vs.C, lab = rownames(res_TPA.vs.C), x = "log2FoldChange", y="padj")
+# ------- Transform read counts -------
+# transformed values can be used for visualization and clustering, not for differential expression analysis
 
-#Add custom log2FC and adjusted P-value cutoffs and size of points and labels
-EnhancedVolcano(res_TPA.vs.C, lab = rownames(res_TPA.vs.C), x = "log2FoldChange", y="padj", pCutoff = 10e-5, FCcutoff = 2, pointSize = 1.5, labSize = 3.0, title = "Untreated versus treated")
-
-#Adjust axis limits
-EnhancedVolcano(res, lab = rownames(res_TPA.vs.C), x = "log2FoldChange", y="padj", xlim = c(-5, 5), ylim = c(0, -log10(10e-10)), title = "Untreated versus treated")
-
-#Modify border and remove gridlines
-EnhancedVolcano(resLFC_TPA.vs.C_ape, lab = rownames(res_TPA.vs.C), x = "log2FoldChange", y="padj", xlim = c(-10, 10), 
-                border = "full", borderWidth = 1.5, borderColour = "black", 
-                gridlines.major = FALSE, gridlines.minor = FALSE, title = "Untreated versus treated",
-                selectLab = c('Nfe2l2','Nqo1','Hmox1','Tnfrsf1b'),
-                drawConnectors = TRUE,
-                widthConnectors = 0.75
-)
-
-EnhancedVolcano(resLFC_TPA.vs.C_ape, lab = rownames(resLFC_TPA.vs.C_ape), x = "log2FoldChange", y="padj", xlim = c(-10, 10), 
-                pCutoff = 0.05, FCcutoff = 4, 
-                border = "full", borderWidth = 1.5, borderColour = "black", 
-                gridlines.major = FALSE, gridlines.minor = FALSE, title = "Untreated versus treated",
-                drawConnectors = TRUE,
-                widthConnectors = 0.75
-)
-# gene of interest: ALOX15B shows high log2 fold change that may be the first priority to look into;
-# you can also consider some genes which have high p value
-# the upregulation and downregulation really depends on the threshold you set
-
-# perform regularized-logarithm transformation (rlog) on the data
-# sample >30 use vst (variance stabilizing transformation) transformation
+# sample > 30: perform vst (variance stabilizing transformation) transformation
 # vsdata <- vst(dds, blind = FALSE)
-# smaller samples use rlog transformation
-# 1
-# vst takes two things into account while normalization, one is size factor(depth normalization) and another is mean dispersion across the sample. 
+
+# smaller samples: perform regularized-logarithm transformation(rlog) transformation
+
+# vst considers (1) size factor(depth normalization) and (2) mean dispersion across the sample,
 # while rld only accounts for size factor.
+# Reference:
+# Michael I Love, Wolfgang Huber, Simon Anders: Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biology 2014, 15:550. http://dx.doi.org/10.1186/s13059-014-0550-8
+
 rld <- rlog(dds)
 colnames(dds)
 rld_TPA.vs.C <- rlog(dds[,1:18])
@@ -350,10 +343,8 @@ plotPCA(rld_w20, intgroup = c("trt"))
 plotPCA(rld_w26, intgroup = c("trt"))
 
 
-# plot Principal Component Analysis
-# project variation in the data into 2D format
-# it explain the variation of data by components
-# from PC1, we can see a clear separation between 4 treated and 4 untreated samples (2 different conditions)
+# ------- Plot Principal Component Analysis ------- 
+# project variation of the data into 2D format
 
 plotPCA(rld_TPA.vs.C, intgroup = c("trt"))
 plotPCA(rld_UA.vs.TPA, intgroup = c("trt"))
@@ -387,39 +378,29 @@ ggplot(pcaData, aes(PC1, PC2, color=trt, shape=wk)) +
   scale_shape_manual(values = c(16, 17, 15, 10))
 
 
-#plot dispersion of dds: variability between replicates as function of normalized read count
+# ------- Plot Dispersion of dds -------
+# plot variability between replicates as function of normalized read count
 # as read counts gets higher, there is less variation
 # red line below 1 is preferred, and the lower the better
 
 plotDispEsts(dds)
 
-
-
-# color by both treated and untreated cell type
-# from PC2, we can see that N080611 cell lines differ from other cell types
-
-
-# subset genes by padjust less than 0.01 and log2FC of 1 and base mean count of a least 20
-
-resultsSig <- res[which(res$padj < 0.01 & abs(res$log2FoldChange) >= 1 & res$baseMean >= 20), ]
-resultsSig <- na.omit(resultsSig)
-# print DE genes with strongest downregulation (head) and upregulation (tail)
+# ------- Plot DEGs -------
 # cannot tell the reference group from here
-head(resultsSig[order(resultsSig$log2FoldChange ), ] ) # downregulated compared to reference group
-tail(resultsSig[order(resultsSig$log2FoldChange ), ] ) # upregulated compared to reference group
 
-# plot expression of individual genes
-# gene with largest positive log2 Fold Change 
+head(resultsSig[order(resultsSig$log2FoldChange ), ] ) # DEGs downregulated compared to reference group
+tail(resultsSig[order(resultsSig$log2FoldChange ), ] ) # DEGs upregulated compared to reference group
+
+# ------- plot Expression of Individual Genes------- 
+# extract gene with largest positive log2 Fold Change 
 plotCounts(dds, gene=which.max(res$log2FoldChange), intgroup="trt", normalized = TRUE)
-plotCounts(dds, gene=which.max(res$log2FoldChange), intgroup="wk")
-# specific gene of interest
-plotCounts(dds, gene="Nfe2l2", intgroup="trt")
+plotCounts(dds, gene=which.max(res$log2FoldChange), intgroup="wk", normalized = TRUE)
 
-## EXERCISE 1 ##
 
-# extract gene counts for a gene of interest
+# extract gene counts for a specific gene of interest
 geneCounts <- plotCounts(dds, gene = "Nfe2l2", intgroup = c("trt","wk"), returnData = TRUE)
 geneCounts
+
 text <- element_text(size = 14)
 
 ggplot(geneCounts, aes(x = trt, y = count, color = wk, group = wk)) + 
@@ -469,7 +450,7 @@ geneCounts %>%
   theme_classic() + 
   facet_wrap(vars(wk))
 
-# plot heatmap of all DE genes
+# ------- plot heatmap of all DE genes ------- 
 mat <- assay(rld)
 mat_w5 <- assay(rld_w5)
 
@@ -500,7 +481,7 @@ pheatmap(DEgenes, scale = "row", show_rownames = FALSE,
          show_colnames=F
 )
 
-# plot heatmap of top 20 DE genes
+# ------- Plot Heatmap of Top 20 DE genes ------- 
 orderedSig <- resSig[order(resSig$padj), ]
 orderedSig
 head(orderedSig, n = 20)
