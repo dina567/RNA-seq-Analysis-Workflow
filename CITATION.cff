@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this code, please cite it as below."
 authors:
 - family-names: "Kuo"
-  given-names: "Hsiao-Chen Dina"
+  given-names: "Hsiao Chen Dina"
 title: "RNA-seq-Analysis-Workflow_BAP-UA-skin-project"
 version: 1.0.0
 url: "https://github.com/dina567/RNA-seq-Analysis-Workflow_BAP-UA-skin-project"
